@@ -1,6 +1,6 @@
 ---
 - name: Install Apache on Debian
-  hosts: webserver
+  hosts: all
   become: yes
   tasks:
     - name: Update apt cache
