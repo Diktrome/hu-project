@@ -1,0 +1,12 @@
+---
+- hosts: samba
+  become: true
+  vars:
+    share_name: data
+    share_path: /srv/samba/data
+    smb_group: smbshare
+    smb_users:
+      - name: alice
+        password: "{{ vault_smb_password_alice }}"
+  roles:
+    - samba

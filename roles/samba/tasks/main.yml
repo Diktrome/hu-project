@@ -1,0 +1,54 @@
+---
+- name: Packages
+  ansible.builtin.apt:
+    name:
+      - samba
+      - samba-common
+    state: present
+    update_cache: true
+
+- name: Group
+  ansible.builtin.group:
+    name: "{{ smb_group }}"
+    system: true
+    state: present
+
+- name: Unix users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ smb_group }}"
+    shell: /usr/sbin/nologin
+    create_home: true
+    state: present
+  loop: "{{ smb_users }}"
+
+- name: Share directory
+  ansible.builtin.file:
+    path: "{{ share_path }}"
+    state: directory
+    owner: root
+    group: "{{ smb_group }}"
+    mode: "2770"
+
+- name: smb.conf template
+  ansible.builtin.template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  notify: Restart smbd
+
+- name: Samba users
+  community.general.samba_user:
+    name: "{{ item.name }}"
+    password: "{{ item.password }}"
+    state: present
+  loop: "{{ smb_users }}"
+
+- name: Enable smbd
+  ansible.builtin.service:
+    name: smbd
+    enabled: true
+    state: started
