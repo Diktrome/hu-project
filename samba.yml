@@ -1,0 +1,113 @@
+---
+- name: Install and configure Samba on Debian 13
+  hosts: debian_samba
+  become: true
+
+  vars:
+    samba_workgroup: WORKGROUP
+    samba_users:
+      - name: diktrome
+        password: "Dikzak13"
+        system: true
+        groups: ["sambashare"]
+    samba_shares:
+      - name: data
+        path: /srv/samba/data
+        owner: root
+        group: sambashare
+        mode: "2770"
+        browsable: "yes"
+        read_only: "no"
+        guest_ok: "no"
+        valid_users: ["@sambashare"]
+        create_mask: "0660"
+        directory_mask: "2770"
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+  tasks:
+    - name: Ensure required packages are installed
+      ansible.builtin.apt:
+        name:
+          - samba
+          - samba-common-bin   # provides smbpasswd and pdbedit
+          - smbclient
+          - winbind
+        state: present
+
+    - name: Ensure group for shared access exists
+      ansible.builtin.group:
+        name: sambashare
+        state: present
+
+    - name: Ensure system users exist
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        shell: /usr/sbin/nologin
+        groups: "{{ item.groups | default([]) }}"
+        append: true
+        state: present
+        create_home: false
+      loop: "{{ samba_users }}"
+      when: item.system | default(true)
+
+    - name: Ensure Samba users exist and set passwords (CLI method)
+      ansible.builtin.shell: |
+        set -eo pipefail
+        if pdbedit -L -u "{{ item.name }}" >/dev/null 2>&1; then
+          printf "%s\n%s\n" "{{ item.password }}" "{{ item.password }}" | smbpasswd -s "{{ item.name }}"
+          echo "changed=password-reset"
+        else
+          printf "%s\n%s\n" "{{ item.password }}" "{{ item.password }}" | smbpasswd -s -a "{{ item.name }}"
+          echo "changed=user-added"
+        fi
+      args:
+        executable: /bin/bash
+      register: smbpass_result
+      changed_when: "'changed=' in smbpass_result.stdout"
+      loop: "{{ samba_users }}"
+
+    - name: Create share directories
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner | default('root') }}"
+        group: "{{ item.group | default('sambashare') }}"
+        mode: "{{ item.mode | default('2770') }}"
+      loop: "{{ samba_shares }}"
+
+    - name: Deploy smb.conf
+      ansible.builtin.template:
+        src: smb.conf.j2
+        dest: /etc/samba/smb.conf
+        owner: root
+        group: root
+        mode: "0644"
+      notify:
+        - Restart smbd
+        - Restart nmbd
+
+    - name: Enable and start Samba services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - smbd
+        - nmbd
+
+  handlers:
+    - name: Restart smbd
+      ansible.builtin.service:
+        name: smbd
+        state: restarted
+
+    - name: Restart nmbd
+      ansible.builtin.service:
+        name: nmbd
+        state: restarted
+
