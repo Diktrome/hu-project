@@ -6,8 +6,8 @@
   vars:
     samba_workgroup: WORKGROUP
     samba_users:
-      - name: diktrome
-        password: "Dikzak13"
+      - name: slimgym
+        password: "slimgym123"
         system: true
         groups: ["sambashare"]
     samba_shares:
