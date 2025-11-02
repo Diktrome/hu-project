@@ -157,7 +157,6 @@
       args:
         chdir: "{{ nextcloud_dir }}"
         creates: "{{ nextcloud_dir }}/config/config.php"
-      become_user: www-data
 
     - name: Ensure trusted domain is set (idempotent)
       ansible.builtin.shell: |
