@@ -14,6 +14,7 @@
     admin_user: admin
     admin_password: "ChangeMeAdmin!"   # put in Vault in real life
     domain_name: "{{ ansible_default_ipv4.address }}"
+    ansible_remote_tmp: /var/www/nextcloud/.ansible_tmp
 
   pre_tasks:
     - name: Update apt cache
@@ -43,7 +44,15 @@
           - unzip
           - wget
         state: present
-
+        
+    - name: Ensure remote Ansible temp dir exists and is owned by www-data
+      ansible.builtin.file:
+        path: /var/www/nextcloud/.ansible_tmp
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0700"
+        
     - name: Ensure MariaDB is started and enabled
       ansible.builtin.service:
         name: mariadb
