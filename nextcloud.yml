@@ -2,22 +2,24 @@
 - name: Install and configure Nextcloud on Debian
   hosts: all
   become: true
+  become_method: sudo
 
   vars:
-    nextcloud_version: "29.0.3"  # pas eventueel aan
+    nextcloud_version: "29.0.3"
     nextcloud_dir: /var/www/nextcloud
     nextcloud_data_dir: /srv/nextcloud-data
     db_name: nextcloud
     db_user: nextcloud
-    db_password: "dskkfkfsr"
+    db_password: "dskkfkfsr"          # put in Vault in real life
     admin_user: admin
-    admin_password: "ChangeMeAdmin!"
+    admin_password: "ChangeMeAdmin!"   # put in Vault in real life
     domain_name: "{{ ansible_default_ipv4.address }}"
 
   pre_tasks:
     - name: Update apt cache
       ansible.builtin.apt:
         update_cache: true
+        cache_valid_time: 3600
 
   tasks:
     - name: Install required packages
@@ -48,37 +50,39 @@
         state: started
         enabled: true
 
+    # -------- DB via CLI (no community collections) --------
     - name: Create database if missing (idempotent)
       ansible.builtin.shell: |
-      set -euo pipefail
-      if ! mysql -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}'" | grep -q .; then
-        mysql -NBe "CREATE DATABASE \`{{ db_name }}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
-        echo CHANGED
-      fi
-    args:
-      executable: /bin/bash
-    register: db_create
-    changed_when: "'CHANGED' in db_create.stdout"
+        set -euo pipefail
+        if ! mysql -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}'" | grep -q .; then
+          mysql -NBe "CREATE DATABASE \`{{ db_name }}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+          echo CHANGED
+        fi
+      args:
+        executable: /bin/bash
+      register: db_create
+      changed_when: "'CHANGED' in db_create.stdout"
 
-   - name: Ensure DB user exists and has privileges (idempotent)
-     ansible.builtin.shell: |
-      set -euo pipefail
-      changed=0
-      # Create user if needed
-      if ! mysql -NBe "SELECT 1 FROM mysql.user WHERE user='{{ db_user }}' AND host='localhost'" | grep -q 1; then
-      mysql -NBe "CREATE USER '{{ db_user }}'@'localhost' IDENTIFIED BY '{{ db_password }}';"
-      changed=1
-      fi
-      # Check grants and grant if missing
-      if ! mysql -NBe "SHOW GRANTS FOR '{{ db_user }}'@'localhost'" | grep -q "ON \`{{ db_name }}\`\.\* TO '{{ db_user }}'@'localhost'"; then
-      mysql -NBe "GRANT ALL PRIVILEGES ON \`{{ db_name }}\`.* TO '{{ db_user }}'@'localhost'; FLUSH PRIVILEGES;"
-      changed=1
-      fi
-      if [ $changed -eq 1 ]; then echo CHANGED; fi
-    args:
-      executable: /bin/bash
-    register: db_user_grant
-    changed_when: "'CHANGED' in db_user_grant.stdout"
+    - name: Ensure DB user exists and has privileges (idempotent)
+      ansible.builtin.shell: |
+        set -euo pipefail
+        changed=0
+        # Create user if needed
+        if ! mysql -NBe "SELECT 1 FROM mysql.user WHERE user='{{ db_user }}' AND host='localhost'" | grep -q 1; then
+          mysql -NBe "CREATE USER '{{ db_user }}'@'localhost' IDENTIFIED BY '{{ db_password }}';"
+          changed=1
+        fi
+        # Check grants and grant if missing
+        if ! mysql -NBe "SHOW GRANTS FOR '{{ db_user }}'@'localhost'" | grep -q "ON \`{{ db_name }}\`\.\* TO '{{ db_user }}'@'localhost'"; then
+          mysql -NBe "GRANT ALL PRIVILEGES ON \`{{ db_name }}\`.* TO '{{ db_user }}'@'localhost'; FLUSH PRIVILEGES;"
+          changed=1
+        fi
+        if [ $changed -eq 1 ]; then echo CHANGED; fi
+      args:
+        executable: /bin/bash
+      register: db_user_grant
+      changed_when: "'CHANGED' in db_user_grant.stdout"
+    # -------------------------------------------------------
 
     - name: Download Nextcloud tarball
       ansible.builtin.get_url:
@@ -112,6 +116,7 @@
     - name: Create Apache config for Nextcloud
       ansible.builtin.copy:
         dest: /etc/apache2/sites-available/nextcloud.conf
+        mode: "0644"
         content: |
           <VirtualHost *:80>
             ServerName {{ domain_name }}
@@ -123,19 +128,23 @@
               Options FollowSymLinks MultiViews
             </Directory>
           </VirtualHost>
-      notify:
-        - Reload Apache
+      notify: Reload Apache
 
-    - name: Enable Nextcloud site and rewrite module
+    - name: Enable required Apache modules (idempotent-ish)
       ansible.builtin.shell: |
-        a2ensite nextcloud.conf
         a2enmod rewrite headers env dir mime
       args:
-        creates: /etc/apache2/sites-enabled/nextcloud.conf
-      notify:
-        - Reload Apache
+        executable: /bin/bash
+      changed_when: false
+      notify: Reload Apache
 
-    - name: Run Nextcloud installer (occ)
+    - name: Enable Nextcloud site
+      ansible.builtin.command: a2ensite nextcloud.conf
+      args:
+        creates: /etc/apache2/sites-enabled/nextcloud.conf
+      notify: Reload Apache
+
+    - name: Run Nextcloud installer (occ) if not already installed
       ansible.builtin.command: >
         php occ maintenance:install
         --database "mysql"
@@ -150,16 +159,18 @@
         creates: "{{ nextcloud_dir }}/config/config.php"
       become_user: www-data
 
-    - name: Set trusted domain
-      ansible.builtin.command: >
+    - name: Ensure trusted domain is set (idempotent)
+      ansible.builtin.shell: |
+        php occ config:system:get trusted_domains 1 >/dev/null 2>&1 || \
         php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
       args:
         chdir: "{{ nextcloud_dir }}"
+        executable: /bin/bash
       become_user: www-data
+      changed_when: false
 
   handlers:
     - name: Reload Apache
       ansible.builtin.service:
         name: apache2
         state: reloaded
-
