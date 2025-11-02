@@ -50,7 +50,7 @@
         state: started
         enabled: true
 
-    - name: Create database if missing (idempotent)
+    - name: Create database if missing 
       ansible.builtin.shell: |
         set -euo pipefail
         if ! mysql -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}'" | grep -q .; then
@@ -62,7 +62,7 @@
       register: db_create
       changed_when: "'CHANGED' in db_create.stdout"
 
-    - name: Ensure DB user exists and has privileges (idempotent)
+    - name: Ensure DB user exists and has privileges 
       ansible.builtin.shell: |
         set -euo pipefail
         changed=0
@@ -127,7 +127,7 @@
       notify:
         - Reload Apache
 
-    - name: Enable required Apache modules (idempotent-ish)
+    - name: Enable required Apache modules 
       ansible.builtin.shell: |
         a2enmod rewrite headers env dir mime
       args:
@@ -172,7 +172,7 @@
         group: www-data
         recurse: true
 
-    - name: Ensure trusted domain is set (idempotent)
+    - name: Ensure trusted domain is set 
       ansible.builtin.shell: |
         sudo -u www-data php occ config:system:get trusted_domains 1 >/dev/null 2>&1 || \
         sudo -u www-data php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
