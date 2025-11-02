@@ -1,0 +1,145 @@
+---
+- name: Install and configure Nextcloud on Debian
+  hosts: all
+  become: true
+
+  vars:
+    nextcloud_version: "29.0.3"  # pas eventueel aan
+    nextcloud_dir: /var/www/nextcloud
+    nextcloud_data_dir: /srv/nextcloud-data
+    db_name: nextcloud
+    db_user: nextcloud
+    db_password: "dskkfkfsr"
+    admin_user: admin
+    admin_password: "ChangeMeAdmin!"
+    domain_name: "{{ ansible_default_ipv4.address }}"
+
+  pre_tasks:
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+
+  tasks:
+    - name: Install required packages
+      ansible.builtin.apt:
+        name:
+          - apache2
+          - libapache2-mod-php
+          - mariadb-server
+          - php
+          - php-cli
+          - php-mysql
+          - php-zip
+          - php-gd
+          - php-curl
+          - php-mbstring
+          - php-intl
+          - php-bcmath
+          - php-gmp
+          - php-xml
+          - php-imagick
+          - unzip
+          - wget
+        state: present
+
+    - name: Ensure MariaDB is started and enabled
+      ansible.builtin.service:
+        name: mariadb
+        state: started
+        enabled: true
+
+    - name: Create Nextcloud database
+      community.mysql.mysql_db:
+        name: "{{ db_name }}"
+        state: present
+
+    - name: Create Nextcloud database user
+      community.mysql.mysql_user:
+        name: "{{ db_user }}"
+        password: "{{ db_password }}"
+        priv: "{{ db_name }}.*:ALL"
+        state: present
+
+    - name: Download Nextcloud tarball
+      ansible.builtin.get_url:
+        url: "https://download.nextcloud.com/server/releases/nextcloud-{{ nextcloud_version }}.tar.bz2"
+        dest: /tmp/nextcloud.tar.bz2
+        mode: "0644"
+
+    - name: Extract Nextcloud
+      ansible.builtin.unarchive:
+        src: /tmp/nextcloud.tar.bz2
+        dest: /var/www/
+        remote_src: true
+        creates: "{{ nextcloud_dir }}/index.php"
+
+    - name: Set permissions on Nextcloud directory
+      ansible.builtin.file:
+        path: "{{ nextcloud_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        recurse: true
+
+    - name: Create data directory
+      ansible.builtin.file:
+        path: "{{ nextcloud_data_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: "0750"
+
+    - name: Create Apache config for Nextcloud
+      ansible.builtin.copy:
+        dest: /etc/apache2/sites-available/nextcloud.conf
+        content: |
+          <VirtualHost *:80>
+            ServerName {{ domain_name }}
+
+            DocumentRoot {{ nextcloud_dir }}
+            <Directory {{ nextcloud_dir }}>
+              Require all granted
+              AllowOverride All
+              Options FollowSymLinks MultiViews
+            </Directory>
+          </VirtualHost>
+      notify:
+        - Reload Apache
+
+    - name: Enable Nextcloud site and rewrite module
+      ansible.builtin.shell: |
+        a2ensite nextcloud.conf
+        a2enmod rewrite headers env dir mime
+      args:
+        creates: /etc/apache2/sites-enabled/nextcloud.conf
+      notify:
+        - Reload Apache
+
+    - name: Run Nextcloud installer (occ)
+      ansible.builtin.command: >
+        php occ maintenance:install
+        --database "mysql"
+        --database-name "{{ db_name }}"
+        --database-user "{{ db_user }}"
+        --database-pass "{{ db_password }}"
+        --admin-user "{{ admin_user }}"
+        --admin-pass "{{ admin_password }}"
+        --data-dir "{{ nextcloud_data_dir }}"
+      args:
+        chdir: "{{ nextcloud_dir }}"
+        creates: "{{ nextcloud_dir }}/config/config.php"
+      become_user: www-data
+
+    - name: Set trusted domain
+      ansible.builtin.command: >
+        php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
+      args:
+        chdir: "{{ nextcloud_dir }}"
+      become_user: www-data
+
+  handlers:
+    - name: Reload Apache
+      ansible.builtin.service:
+        name: apache2
+        state: reloaded
+
