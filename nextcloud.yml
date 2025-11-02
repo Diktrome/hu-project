@@ -50,7 +50,6 @@
         state: started
         enabled: true
 
-    # ---------- DB via CLI (no community collections) ----------
     - name: Create database if missing (idempotent)
       ansible.builtin.shell: |
         set -euo pipefail
@@ -80,7 +79,6 @@
         executable: /bin/bash
       register: db_user_grant
       changed_when: "'CHANGED' in db_user_grant.stdout"
-    # -----------------------------------------------------------
 
     - name: Download Nextcloud tarball
       ansible.builtin.get_url:
@@ -158,6 +156,14 @@
         chdir: "{{ nextcloud_dir }}"
         creates: "{{ nextcloud_dir }}/config/config.php"
         executable: /bin/bash
+
+    - name: Ensure Nextcloud data directory has correct ownership
+      ansible.builtin.file:
+        path: "{{ nextcloud_data_dir }}"
+        state: directory
+        owner: www-data
+        group: www-data
+        recurse: true
 
     - name: Ensure Nextcloud tree owned by www-data
       ansible.builtin.file:
