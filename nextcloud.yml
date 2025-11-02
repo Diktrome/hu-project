@@ -48,17 +48,37 @@
         state: started
         enabled: true
 
-    - name: Create Nextcloud database
-      community.mysql.mysql_db:
-        name: "{{ db_name }}"
-        state: present
+    - name: Create database if missing (idempotent)
+      ansible.builtin.shell: |
+      set -euo pipefail
+      if ! mysql -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}'" | grep -q .; then
+        mysql -NBe "CREATE DATABASE \`{{ db_name }}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+        echo CHANGED
+      fi
+    args:
+      executable: /bin/bash
+    register: db_create
+    changed_when: "'CHANGED' in db_create.stdout"
 
-    - name: Create Nextcloud database user
-      community.mysql.mysql_user:
-        name: "{{ db_user }}"
-        password: "{{ db_password }}"
-        priv: "{{ db_name }}.*:ALL"
-        state: present
+   - name: Ensure DB user exists and has privileges (idempotent)
+     ansible.builtin.shell: |
+      set -euo pipefail
+      changed=0
+      # Create user if needed
+      if ! mysql -NBe "SELECT 1 FROM mysql.user WHERE user='{{ db_user }}' AND host='localhost'" | grep -q 1; then
+      mysql -NBe "CREATE USER '{{ db_user }}'@'localhost' IDENTIFIED BY '{{ db_password }}';"
+      changed=1
+      fi
+      # Check grants and grant if missing
+      if ! mysql -NBe "SHOW GRANTS FOR '{{ db_user }}'@'localhost'" | grep -q "ON \`{{ db_name }}\`\.\* TO '{{ db_user }}'@'localhost'"; then
+      mysql -NBe "GRANT ALL PRIVILEGES ON \`{{ db_name }}\`.* TO '{{ db_user }}'@'localhost'; FLUSH PRIVILEGES;"
+      changed=1
+      fi
+      if [ $changed -eq 1 ]; then echo CHANGED; fi
+    args:
+      executable: /bin/bash
+    register: db_user_grant
+    changed_when: "'CHANGED' in db_user_grant.stdout"
 
     - name: Download Nextcloud tarball
       ansible.builtin.get_url:
