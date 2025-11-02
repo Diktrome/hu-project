@@ -10,11 +10,10 @@
     nextcloud_data_dir: /srv/nextcloud-data
     db_name: nextcloud
     db_user: nextcloud
-    db_password: "dskkfkfsr"          # put in Vault in real life
+    db_password: "dskkfkfsr"          
     admin_user: admin
-    admin_password: "ChangeMeAdmin!"   # put in Vault in real life
+    admin_password: "ChangeMeAdmin!"  
     domain_name: "{{ ansible_default_ipv4.address }}"
-    ansible_remote_tmp: /var/www/nextcloud/.ansible_tmp
 
   pre_tasks:
     - name: Update apt cache
@@ -44,22 +43,14 @@
           - unzip
           - wget
         state: present
-        
-    - name: Ensure remote Ansible temp dir exists and is owned by www-data
-      ansible.builtin.file:
-        path: /var/www/nextcloud/.ansible_tmp
-        state: directory
-        owner: www-data
-        group: www-data
-        mode: "0700"
-        
+
     - name: Ensure MariaDB is started and enabled
       ansible.builtin.service:
         name: mariadb
         state: started
         enabled: true
 
-    # -------- DB via CLI (no community collections) --------
+    # ---------- DB via CLI (no community collections) ----------
     - name: Create database if missing (idempotent)
       ansible.builtin.shell: |
         set -euo pipefail
@@ -76,12 +67,10 @@
       ansible.builtin.shell: |
         set -euo pipefail
         changed=0
-        # Create user if needed
         if ! mysql -NBe "SELECT 1 FROM mysql.user WHERE user='{{ db_user }}' AND host='localhost'" | grep -q 1; then
           mysql -NBe "CREATE USER '{{ db_user }}'@'localhost' IDENTIFIED BY '{{ db_password }}';"
           changed=1
         fi
-        # Check grants and grant if missing
         if ! mysql -NBe "SHOW GRANTS FOR '{{ db_user }}'@'localhost'" | grep -q "ON \`{{ db_name }}\`\.\* TO '{{ db_user }}'@'localhost'"; then
           mysql -NBe "GRANT ALL PRIVILEGES ON \`{{ db_name }}\`.* TO '{{ db_user }}'@'localhost'; FLUSH PRIVILEGES;"
           changed=1
@@ -91,7 +80,7 @@
         executable: /bin/bash
       register: db_user_grant
       changed_when: "'CHANGED' in db_user_grant.stdout"
-    # -------------------------------------------------------
+    # -----------------------------------------------------------
 
     - name: Download Nextcloud tarball
       ansible.builtin.get_url:
@@ -137,7 +126,8 @@
               Options FollowSymLinks MultiViews
             </Directory>
           </VirtualHost>
-      notify: Reload Apache
+      notify:
+        - Reload Apache
 
     - name: Enable required Apache modules (idempotent-ish)
       ansible.builtin.shell: |
@@ -153,29 +143,36 @@
         creates: /etc/apache2/sites-enabled/nextcloud.conf
       notify: Reload Apache
 
+    # Run occ as root to avoid ACL temp-file issues, then fix ownership.
     - name: Run Nextcloud installer (occ) if not already installed
-      ansible.builtin.command: >
-        php occ maintenance:install
-        --database "mysql"
-        --database-name "{{ db_name }}"
-        --database-user "{{ db_user }}"
-        --database-pass "{{ db_password }}"
-        --admin-user "{{ admin_user }}"
-        --admin-pass "{{ admin_password }}"
-        --data-dir "{{ nextcloud_data_dir }}"
+      ansible.builtin.shell: |
+        php occ maintenance:install \
+          --database "mysql" \
+          --database-name "{{ db_name }}" \
+          --database-user "{{ db_user }}" \
+          --database-pass "{{ db_password }}" \
+          --admin-user "{{ admin_user }}" \
+          --admin-pass "{{ admin_password }}" \
+          --data-dir "{{ nextcloud_data_dir }}"
       args:
         chdir: "{{ nextcloud_dir }}"
         creates: "{{ nextcloud_dir }}/config/config.php"
-      become_user: www-data 
+        executable: /bin/bash
+
+    - name: Ensure Nextcloud tree owned by www-data
+      ansible.builtin.file:
+        path: "{{ nextcloud_dir }}"
+        owner: www-data
+        group: www-data
+        recurse: true
 
     - name: Ensure trusted domain is set (idempotent)
       ansible.builtin.shell: |
-        php occ config:system:get trusted_domains 1 >/dev/null 2>&1 || \
-        php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
+        sudo -u www-data php occ config:system:get trusted_domains 1 >/dev/null 2>&1 || \
+        sudo -u www-data php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
       args:
         chdir: "{{ nextcloud_dir }}"
         executable: /bin/bash
-      become_user: www-data
       changed_when: false
 
   handlers:
