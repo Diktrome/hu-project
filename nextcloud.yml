@@ -5,7 +5,7 @@
   become_method: sudo
 
   vars:
-    nextcloud_version: "29.0.3"
+    nextcloud_version: "32.0.1"
     nextcloud_dir: /var/www/nextcloud
     nextcloud_data_dir: /srv/nextcloud-data
     db_name: nextcloud
