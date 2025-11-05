@@ -10,9 +10,9 @@
     nextcloud_data_dir: /srv/nextcloud-data
     db_name: nextcloud
     db_user: nextcloud
-    db_password: "dskkfkfsr"          
+    db_password: "dskkfkfsr"
     admin_user: admin
-    admin_password: "ChangeMeAdmin!"  
+    admin_password: "ChangeMeAdmin!"
     domain_name: "{{ ansible_default_ipv4.address }}"
 
   pre_tasks:
@@ -42,6 +42,9 @@
           - php-imagick
           - unzip
           - wget
+          # === added for extracting .tar.bz2 ===
+          - bzip2
+          - tar
         state: present
 
     - name: Ensure MariaDB is started and enabled
@@ -50,7 +53,7 @@
         state: started
         enabled: true
 
-    - name: Create database if missing 
+    - name: Create database if missing
       ansible.builtin.shell: |
         set -euo pipefail
         if ! mysql -NBe "SELECT SCHEMA_NAME FROM INFORMATION_SCHEMA.SCHEMATA WHERE SCHEMA_NAME='{{ db_name }}'" | grep -q .; then
@@ -62,7 +65,7 @@
       register: db_create
       changed_when: "'CHANGED' in db_create.stdout"
 
-    - name: Ensure DB user exists and has privileges 
+    - name: Ensure DB user exists and has privileges
       ansible.builtin.shell: |
         set -euo pipefail
         changed=0
@@ -85,13 +88,15 @@
         url: "https://download.nextcloud.com/server/releases/nextcloud-{{ nextcloud_version }}.tar.bz2"
         dest: /tmp/nextcloud.tar.bz2
         mode: "0644"
+        # optional: if a previous run left a corrupt file, force a fresh download
+        force: true
 
     - name: Extract Nextcloud
       ansible.builtin.unarchive:
         src: /tmp/nextcloud.tar.bz2
         dest: /var/www/
         remote_src: true
-        creates: "{{ nextcloud_dir }}/index.php"
+        creates: "{{ nextcloud_dir }}/occ"
 
     - name: Set permissions on Nextcloud directory
       ansible.builtin.file:
@@ -124,12 +129,10 @@
               Options FollowSymLinks MultiViews
             </Directory>
           </VirtualHost>
-      notify:
-        - Reload Apache
+      notify: Reload Apache
 
-    - name: Enable required Apache modules 
-      ansible.builtin.shell: |
-        a2enmod rewrite headers env dir mime
+    - name: Enable required Apache modules
+      ansible.builtin.shell: a2enmod rewrite headers env dir mime
       args:
         executable: /bin/bash
       changed_when: false
@@ -141,7 +144,6 @@
         creates: /etc/apache2/sites-enabled/nextcloud.conf
       notify: Reload Apache
 
-    # Run occ as root to avoid ACL temp-file issues, then fix ownership.
     - name: Run Nextcloud installer (occ) if not already installed
       ansible.builtin.shell: |
         php occ maintenance:install \
@@ -172,7 +174,7 @@
         group: www-data
         recurse: true
 
-    - name: Ensure trusted domain is set 
+    - name: Ensure trusted domain is set
       ansible.builtin.shell: |
         sudo -u www-data php occ config:system:get trusted_domains 1 >/dev/null 2>&1 || \
         sudo -u www-data php occ config:system:set trusted_domains 1 --value="{{ domain_name }}"
