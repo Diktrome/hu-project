@@ -3,11 +3,6 @@
   hosts: all
   gather_facts: false
 
-  vars:
-    ospf_instance_name: core
-    ospf_area_id: "0.0.0.0"
-    ospf_version: "2" 
-
   tasks:
     - name: laat zien dat ospf er nog niet op staat
       community.routeros.command:
@@ -19,10 +14,10 @@
         commands:
           - >
             /routing ospf instance
-            :if ([:len [find where name="{{ ospf_instance_name }}"]] = 0) do={
-              add name={{ ospf_instance_name }} router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+            :if ([:len [find where name="core"]] = 0) do={
+              add name=core router-id= {{ router_id }} version=2 redistribute=connected disabled=no
             } else={
-              set [find where name="{{ ospf_instance_name }}"] router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+              set [find where name="core"] router-id={{ router_id }} version=2 redistribute=connected disabled=no
             }
 
     - name: Ensure backbone area exists
@@ -30,8 +25,8 @@
         commands:
           - >
             /routing ospf area
-            :if ([:len [find where area-id={{ ospf_area_id }} && instance={{ ospf_instance_name }}]] = 0) do={
-              add instance={{ ospf_instance_name }} area-id={{ ospf_area_id }}
+            :if ([:len [find where area-id=0.0.0.0 && instance=core]] = 0) do={
+              add instance=core area-id=0.0.0.0
             }
 
     - name: Ensure interface-templates for each network
@@ -39,8 +34,8 @@
         commands:
           - >
             /routing ospf interface-template
-            :if ([:len [find where area={{ ospf_area_id }} && networks={{ item.network }}]] = 0) do={
-              add area={{ ospf_area_id }} type={{ item.type }} networks={{ item.network }}
+            :if ([:len [find where area=0.0.0.0 && networks={{ item.network }}]] = 0) do={
+              add area=0.0.0.0 type={{ item.type }} networks={{ item.network }}
             }
     - name: laat zien dat ospf nu werkt 
       community.routeros.command:
