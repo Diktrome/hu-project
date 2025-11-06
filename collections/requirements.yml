@@ -1,5 +1,3 @@
 ---
-- src: https://github.com/ansible-collections/community.routeros.git
-  scm: git
-  version: main
-  name: community.routeros
+collections:
+  - name: community.routeros
