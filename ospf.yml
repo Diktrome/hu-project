@@ -1,6 +1,6 @@
 ---
 - name: Fallback without collections (raw SSH)
-  hosts: routers
+  hosts: all
   gather_facts: no
   vars:
     ansible_connection: ssh
