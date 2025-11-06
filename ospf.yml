@@ -1,0 +1,11 @@
+---
+- name: Configure OSPF on RouterOS without ansible-galaxy
+  hosts: routers
+  gather_facts: no
+  tasks:
+  - name: Display resource statistics (routeros)
+    community.network.routeros_command:
+      commands: /system resource print
+    register: routeros_resources
+    when: ansible_network_os == 'community.network.routeros'
+
