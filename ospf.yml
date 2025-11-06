@@ -7,7 +7,7 @@
     - name: Show OSPF neighbors (before)
       community.routeros.command:
         commands:
-          - /routing ospf neighbor print
+          - /routing/ospf/area/ print 
       register: ospf_neighbors_before
 
     - name: Debug OSPF neighbors (before)
@@ -57,7 +57,7 @@
     - name: Show OSPF neighbors (after)
       community.routeros.command:
         commands:
-          - /routing ospf neighbor print
+          - /routing/ospf/area/ print 
       register: ospf_neighbors_after
 
     - name: Debug OSPF neighbors (after)
