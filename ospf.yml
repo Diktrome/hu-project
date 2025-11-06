@@ -1,68 +1,23 @@
 ---
-- name: Configureer OSPF op MikroTik RouterOS v7
+- name: RouterOS test with network_cli connection
   hosts: all
-  gather_facts: no
-  collections:
-    - community.routeros
-
-  vars:
-    ospf_instance_name: core
-    ospf_area_id: "0.0.0.0"
-    ospf_version: "2"   # OSPFv2 voor IPv4
-
+  gather_facts: false
   tasks:
-    - name: Check of OSPF instance al bestaat
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf instance print detail where name={{ ospf_instance_name }}
-      register: inst_out
 
-    - name: Maak OSPF instance (als die nog niet bestaat)
-      community.routeros.routeros_command:
+    - name: Gather system resources
+      community.routeros.command:
         commands:
-          - /routing ospf instance add name={{ ospf_instance_name }} router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
-      when: inst_out.stdout[0] is not regex("name={{ ospf_instance_name }}")
+          - /system resource print
+      register: system_resource_print
 
-    - name: Update router-id indien nodig
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf instance set [find where name={{ ospf_instance_name }}] router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+    - name: Show system resources
+      debug:
+        var: system_resource_print.stdout_lines
 
-    - name: Check of backbone area al bestaat
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf area print detail where area-id={{ ospf_area_id }} and instance={{ ospf_instance_name }}
-      register: area_out
+    - name: Gather facts
+      community.routeros.facts:
 
-    - name: Maak backbone area (als die nog niet bestaat)
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf area add instance={{ ospf_instance_name }} area-id={{ ospf_area_id }}
-      when: area_out.stdout[0] == ""
-
-    - name: Bestaande interface-templates ophalen (voor idempotentie)
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf interface-template print detail
-      register: tmpl_out
-
-    - name: Voeg interface-templates toe voor opgegeven netwerken
-      vars:
-        _exists_cmd: "network={{ item.network }} and area={{ ospf_area_id }}"
-      community.routeros.routeros_command:
-        commands:
-          - /routing ospf interface-template print where {{ _exists_cmd }}
-          - /routing ospf interface-template add area={{ ospf_area_id }} type={{ item.type }} networks={{ item.network }}
-      when: >
-        (
-          (tmpl_chk.stdout is defined and tmpl_chk.stdout|length > 0)
-          and (tmpl_chk.stdout[0] == "")
-        ) or (tmpl_chk is not defined)
-      loop: "{{ ospf_networks }}"
-      loop_control:
-        label: "{{ item.network }} ({{ item.type }})"
-      register: add_tmpl
-      vars_prompt: []
-      # mini-trick: eerst checken of de template bestaat, via een subtask
-      pre_tasks: []
-
+    - name: Show a fact
+      debug:
+        msg: "First IP address: {{ ansible_net_all_ipv4_addresses[0] }}"
+  
