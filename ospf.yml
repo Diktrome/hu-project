@@ -7,9 +7,13 @@
     ospf_instance_name: core
     ospf_area_id: "0.0.0.0"
     ospf_version: "2" 
-    
-  tasks:
 
+  tasks:
+    - name: laat zien dat ospf er nog niet op staat
+      community.routeros.command:
+        command:
+          - >
+            /routing ospf neighbor print   
     - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
@@ -38,6 +42,11 @@
             :if ([:len [find where area={{ ospf_area_id }} && networks={{ item.network }}]] = 0) do={
               add area={{ ospf_area_id }} type={{ item.type }} networks={{ item.network }}
             }
+    - name: laat zien dat ospf nu werkt 
+      community.routeros.command:
+        command:
+          - >
+            /routing ospf neighbor print
       loop: "{{ ospf_networks }}"
       loop_control:
         label: "{{ item.network }} ({{ item.type }})"
