@@ -1,13 +1,13 @@
 ---
-- name: Configure OSPF on RouterOS without ansible-galaxy
+- name: Fallback without collections (raw SSH)
   hosts: routers
   gather_facts: no
-  collections:
-    - community.network
+  vars:
+    ansible_connection: ssh
   tasks:
-  - name: Display resource statistics (routeros)
-    community.network.routeros_command:
-      commands: /system resource print
-    register: routeros_resources
-    when: ansible_network_os == 'community.network.routeros'
+    - name: Run resource print
+      ansible.builtin.raw: /system resource print
+      register: out
 
+    - ansible.builtin.debug:
+        var: out.stdout_lines
