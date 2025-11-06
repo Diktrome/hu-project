@@ -23,6 +23,10 @@
             } else={
               set [find where name="core"] router-id={{ router_id }} version=2 redistribute=connected disabled=no
             }
+      register: OSPF_resource_print
+    - name: Show system OSPF
+      debug:
+        var: OSPF_resource_print.stdout_lines
 
     - name: Ensure backbone area exists
       community.routeros.command:
@@ -32,6 +36,10 @@
             :if ([:len [find where area-id=0.0.0.0 && instance=core]] = 0) do={
               add instance=core area-id=0.0.0.0
             }
+      register: OSPF_resource_print
+    - name: Show system OSPF
+      debug:
+        var: OSPF_resource_print.stdout_lines
 
     - name: Ensure interface-templates for each network
       community.routeros.command:
@@ -41,10 +49,20 @@
             :if ([:len [find where area=0.0.0.0 && networks={{ item.network }}]] = 0) do={
               add area=0.0.0.0 type={{ item.type }} networks={{ item.network }}
             }
+      register: OSPF_resource_print
+    - name: Show system OSPF
+      debug:
+        var: OSPF_resource_print.stdout_lines
+
     - name: laat zien dat ospf nu werkt 
       community.routeros.command:
         command:
             /routing ospf neighbor print
+      register: OSPF_resource_print
+    - name: Show system OSPF
+      debug:
+        var: OSPF_resource_print.stdout_lines
+        
       loop: "{{ ospf_networks }}"
       loop_control:
         label: "{{ item.network }} ({{ item.type }})"
