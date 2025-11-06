@@ -6,9 +6,8 @@
   tasks:
     - name: laat zien dat ospf er nog niet op staat
       community.routeros.command:
-        command:
-          - >
-            /routing ospf neighbor print   
+        commands:
+          - /routing ospf neighbor print   
     - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
@@ -40,7 +39,6 @@
     - name: laat zien dat ospf nu werkt 
       community.routeros.command:
         command:
-          - >
             /routing ospf neighbor print
       loop: "{{ ospf_networks }}"
       loop_control:
