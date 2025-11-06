@@ -2,29 +2,25 @@
 - name: RouterOS test with network_cli connection
   hosts: all
   gather_facts: false
-  
-  vars:
-    ospf_instance_name: core
-    ospf_area_id: "0.0.0.0"
-    ospf_version: "2"
+
   tasks:
 
     - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
-          - /routing ospf instance print detail where name={{ ospf_instance_name }}
+          - /routing ospf instance print detail where name=core
       register: system_resource_print
 
     - name: Maak OSPF instance (als die nog niet bestaat)
       community.routeros.command:
         commands:
-          - /routing ospf instance add name={{ ospf_instance_name }} router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
-      when: inst_out.stdout[0] is not regex("name={{ ospf_instance_name }}")
+          - /routing ospf instance add name=core router-id=0.0.0.0 version=2 redistribute=connected disabled=no
+      when: inst_out.stdout[0] is not regex("name=core")
 
     - name: Update router-id indien nodig
       community.routeros.command:
         commands:
-          - /routing ospf instance set [find where name={{ ospf_instance_name }}] router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+          - /routing ospf instance set [find where name=core] router-id=0.0.0.0 version=2 redistribute=connected disabled=no
 
     - name: Show system resources
       debug:
