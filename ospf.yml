@@ -5,7 +5,7 @@
   vars:
     ospf_instance_name: core
     ospf_area_id: "0.0.0.0"
-    ospf_version: "2
+    ospf_version: "2"
   tasks:
 
     - name: Check of OSPF instance al bestaat
