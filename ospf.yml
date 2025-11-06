@@ -1,11 +1,23 @@
 ---
-- name: Configure OSPF on RouterOS without ansible-galaxy
+- name: RouterOS test with network_cli connection
   hosts: routers
-  gather_facts: no
+  gather_facts: false
   tasks:
-  - name: Display resource statistics (routeros)
-    community.network.routeros_command:
-      commands: /system resource print
-    register: routeros_resources
-    when: ansible_network_os == 'community.network.routeros'
 
+    - name: Gather system resources
+      community.routeros.command:
+        commands:
+          - /system resource print
+      register: system_resource_print
+
+    - name: Show system resources
+      debug:
+        var: system_resource_print.stdout_lines
+
+    - name: Gather facts
+      community.routeros.facts:
+
+    - name: Show a fact
+      debug:
+        msg: "First IP address: {{ ansible_net_all_ipv4_addresses[0] }}"
+  
