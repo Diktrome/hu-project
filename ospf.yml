@@ -2,12 +2,16 @@
 - name: RouterOS test with network_cli connection
   hosts: all
   gather_facts: false
+  vars:
+    ospf_instance_name: core
+    ospf_area_id: "0.0.0.0"
+    ospf_version: "2
   tasks:
 
-    - name: Gather system resources
+    - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
-          - /system resource print
+          - /routing ospf instance print detail where name={{ ospf_instance_name }}
       register: system_resource_print
 
     - name: Show system resources
