@@ -14,6 +14,17 @@
           - /routing ospf instance print detail where name={{ ospf_instance_name }}
       register: system_resource_print
 
+    - name: Maak OSPF instance (als die nog niet bestaat)
+      community.routeros.routeros_command:
+        commands:
+          - /routing ospf instance add name={{ ospf_instance_name }} router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+      when: inst_out.stdout[0] is not regex("name={{ ospf_instance_name }}")
+
+    - name: Update router-id indien nodig
+      community.routeros.routeros_command:
+        commands:
+          - /routing ospf instance set [find where name={{ ospf_instance_name }}] router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+
     - name: Show system resources
       debug:
         var: system_resource_print.stdout_lines
