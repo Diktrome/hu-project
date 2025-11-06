@@ -1,0 +1,8 @@
+ansible_connection: ansible.netcommon.network_cli
+ansible_network_os: community.network.routeros
+ansible_user: admin
+ansible_password: slimgym123
+ansible_become: true
+ansible_become_method: enable
+ansible_become_password: slimgym123
+ansible_paramiko_proxy_command: '-o ProxyCommand="ssh -W %h:%p -q bastion01"'
