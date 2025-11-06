@@ -8,10 +8,11 @@
       community.routeros.command:
         commands:
           - /routing ospf neighbor print   
-        register: OSPF_resource_print
+      register: OSPF_resource_print
     - name: Show system OSPF
       debug:
         var: OSPF_resource_print.stdout_lines
+        
     - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
