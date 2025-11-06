@@ -2,8 +2,11 @@
 - name: Fallback without collections (raw SSH)
   hosts: all
   gather_facts: no
+<<<<<<< HEAD
   vars:
     ansible_connection: ssh
+=======
+>>>>>>> parent of 26741f2 (Add community.network collection for OSPF configuration)
   tasks:
     - name: Run resource print
       ansible.builtin.raw: /system resource print
