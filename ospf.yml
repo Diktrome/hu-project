@@ -2,6 +2,8 @@
 - name: RouterOS test with network_cli connection
   hosts: all
   gather_facts: false
+  collections:
+    - community.routeros
   vars:
     ospf_instance_name: core
     ospf_area_id: "0.0.0.0"
