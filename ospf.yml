@@ -1,13 +1,7 @@
 ---
-- name: RouterOS test with network_cli connection
+- name: RouterOS OSPF on 192.168.100.0/24 (network_cli)
   hosts: all
   gather_facts: false
-
-  vars:
-    # example structure; define this in group_vars/host_vars as you prefer
-    # ospf_networks:
-    #   - { network: "10.0.10.0/24", type: "broadcast" }
-    #   - { network: "10.0.20.0/24", type: "ptp" }
 
   tasks:
     - name: Show OSPF neighbors (before)
@@ -31,10 +25,6 @@
             }
       register: ospf_instance_result
 
-    - name: Show OSPF instance command result
-      debug:
-        var: ospf_instance_result.stdout_lines
-
     - name: Ensure backbone area (0.0.0.0) exists on instance core
       community.routeros.command:
         commands:
@@ -44,11 +34,7 @@
             }
       register: ospf_area_result
 
-    - name: Show OSPF area command result
-      debug:
-        var: ospf_area_result.stdout_lines
-
-    - name: Ensure interface-templates for each network
+    - name: Ensure interface-templates for each network (incl. 192.168.100.0/24)
       community.routeros.command:
         commands:
           - >
@@ -60,9 +46,13 @@
         label: "{{ item.network }} ({{ item.type }})"
       register: ospf_templates_result
 
-    - name: Show template results
+    - name: Show template results (per item)
       debug:
-        var: ospf_templates_result.stdout_lines
+        msg:
+          network: "{{ item.item.network }}"
+          type: "{{ item.item.type }}"
+          stdout_lines: "{{ item.stdout_lines | default([]) }}"
+      loop: "{{ ospf_templates_result.results }}"
 
     - name: Show OSPF neighbors (after)
       community.routeros.command:
