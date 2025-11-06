@@ -3,33 +3,41 @@
   hosts: all
   gather_facts: false
 
+  vars:
+    ospf_instance_name: core
+    ospf_area_id: "0.0.0.0"
+    ospf_version: "2" 
+    
   tasks:
 
     - name: Check of OSPF instance al bestaat
       community.routeros.command:
         commands:
-          - /routing ospf instance print detail where name=core
-      register: system_resource_print
+          - >
+            /routing ospf instance
+            :if ([:len [find where name="{{ ospf_instance_name }}"]] = 0) do={
+              add name={{ ospf_instance_name }} router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+            } else={
+              set [find where name="{{ ospf_instance_name }}"] router-id={{ router_id }} version={{ ospf_version }} redistribute=connected disabled=no
+            }
 
-    - name: Maak OSPF instance (als die nog niet bestaat)
+    - name: Ensure backbone area exists
       community.routeros.command:
         commands:
-          - /routing ospf instance add name=core router-id=0.0.0.0 version=2 redistribute=connected disabled=no
-      when: inst_out.stdout[0] is not regex("name=core")
+          - >
+            /routing ospf area
+            :if ([:len [find where area-id={{ ospf_area_id }} && instance={{ ospf_instance_name }}]] = 0) do={
+              add instance={{ ospf_instance_name }} area-id={{ ospf_area_id }}
+            }
 
-    - name: Update router-id indien nodig
+    - name: Ensure interface-templates for each network
       community.routeros.command:
         commands:
-          - /routing ospf instance set [find where name=core] router-id=0.0.0.0 version=2 redistribute=connected disabled=no
-
-    - name: Show system resources
-      debug:
-        var: system_resource_print.stdout_lines
-
-    - name: Gather facts
-      community.routeros.facts:
-
-    - name: Show a fact
-      debug:
-        msg: "First IP address: {{ ansible_net_all_ipv4_addresses[0] }}"
-  
+          - >
+            /routing ospf interface-template
+            :if ([:len [find where area={{ ospf_area_id }} && networks={{ item.network }}]] = 0) do={
+              add area={{ ospf_area_id }} type={{ item.type }} networks={{ item.network }}
+            }
+      loop: "{{ ospf_networks }}"
+      loop_control:
+        label: "{{ item.network }} ({{ item.type }})"
