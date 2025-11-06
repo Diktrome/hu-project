@@ -3,66 +3,73 @@
   hosts: all
   gather_facts: false
 
-  tasks:
-    - name: laat zien dat ospf er nog niet op staat
-      community.routeros.command:
-        commands:
-          - /routing ospf neighbor print   
-      register: OSPF_resource_print
-    - name: Show system OSPF
-      debug:
-        var: OSPF_resource_print.stdout_lines
-        
-    - name: Check of OSPF instance al bestaat
-      community.routeros.command:
-        commands:
-          - >
-            /routing ospf instance
-            :if ([:len [find where name="core"]] = 0) do={
-              add name=core router-id= {{ router_id }} version=2 redistribute=connected disabled=no
-            } else={
-              set [find where name="core"] router-id={{ router_id }} version=2 redistribute=connected disabled=no
-            }
-      register: OSPF_resource_print
-    - name: Show system OSPF
-      debug:
-        var: OSPF_resource_print.stdout_lines
+  vars:
+    # example structure; define this in group_vars/host_vars as you prefer
+    # ospf_networks:
+    #   - { network: "10.0.10.0/24", type: "broadcast" }
+    #   - { network: "10.0.20.0/24", type: "ptp" }
 
-    - name: Ensure backbone area exists
+  tasks:
+    - name: Show OSPF neighbors (before)
+      community.routeros.command:
+        commands:
+          - /routing ospf neighbor print
+      register: ospf_neighbors_before
+
+    - name: Debug OSPF neighbors (before)
+      debug:
+        var: ospf_neighbors_before.stdout_lines
+
+    - name: Ensure OSPF instance "core" exists and is configured
       community.routeros.command:
         commands:
           - >
-            /routing ospf area
-            :if ([:len [find where area-id=0.0.0.0 && instance=core]] = 0) do={
-              add instance=core area-id=0.0.0.0
+            :if ([:len [/routing ospf instance find where name="core"]] = 0) do={
+              /routing ospf instance add name=core router-id={{ router_id }} version=2 redistribute=connected disabled=no
+            } else={
+              /routing ospf instance set [find where name="core"] router-id={{ router_id }} version=2 redistribute=connected disabled=no
             }
-      register: OSPF_resource_print
-    - name: Show system OSPF
+      register: ospf_instance_result
+
+    - name: Show OSPF instance command result
       debug:
-        var: OSPF_resource_print.stdout_lines
+        var: ospf_instance_result.stdout_lines
+
+    - name: Ensure backbone area (0.0.0.0) exists on instance core
+      community.routeros.command:
+        commands:
+          - >
+            :if ([:len [/routing ospf area find where area-id=0.0.0.0 && instance=core]] = 0) do={
+              /routing ospf area add instance=core area-id=0.0.0.0
+            }
+      register: ospf_area_result
+
+    - name: Show OSPF area command result
+      debug:
+        var: ospf_area_result.stdout_lines
 
     - name: Ensure interface-templates for each network
       community.routeros.command:
         commands:
           - >
-            /routing ospf interface-template
-            :if ([:len [find where area=0.0.0.0 && networks={{ item.network }}]] = 0) do={
-              add area=0.0.0.0 type={{ item.type }} networks={{ item.network }}
+            :if ([:len [/routing ospf interface-template find where area=0.0.0.0 && networks="{{ item.network }}"]] = 0) do={
+              /routing ospf interface-template add area=0.0.0.0 type={{ item.type }} networks={{ item.network }}
             }
-      register: OSPF_resource_print
-    - name: Show system OSPF
-      debug:
-        var: OSPF_resource_print.stdout_lines
-
-    - name: laat zien dat ospf nu werkt 
-      community.routeros.command:
-        command:
-            /routing ospf neighbor print
-      register: OSPF_resource_print
-    - name: Show system OSPF
-      debug:
-        var: OSPF_resource_print.stdout_lines
-        
       loop: "{{ ospf_networks }}"
       loop_control:
         label: "{{ item.network }} ({{ item.type }})"
+      register: ospf_templates_result
+
+    - name: Show template results
+      debug:
+        var: ospf_templates_result.stdout_lines
+
+    - name: Show OSPF neighbors (after)
+      community.routeros.command:
+        commands:
+          - /routing ospf neighbor print
+      register: ospf_neighbors_after
+
+    - name: Debug OSPF neighbors (after)
+      debug:
+        var: ospf_neighbors_after.stdout_lines
